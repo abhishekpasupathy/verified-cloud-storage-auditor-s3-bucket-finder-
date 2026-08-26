@@ -13,6 +13,7 @@ export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [error, setError] = useState("");
+  const [agentic, setAgentic] = useState(true);
 
   async function getToken(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(""); setVerified(false); setResults([]); setLogs([]);
@@ -38,10 +39,12 @@ export default function Home() {
 
   function startScan() {
     if (!verification) return; setBusy(true); setError(""); setResults([]); setLogs(["Opening audit stream…"]);
-    const source = new EventSource(`/api/scan?domain=${encodeURIComponent(domain)}&verifiedToken=${encodeURIComponent(verification.token)}`);
+    const endpoint = agentic ? "/api/agent-scan" : "/api/scan";
+    const source = new EventSource(`${endpoint}?domain=${encodeURIComponent(domain)}&verifiedToken=${encodeURIComponent(verification.token)}`);
     source.onmessage = (event) => {
       const data = JSON.parse(event.data) as { type: string; message?: string } & Result;
       if (data.type === "status" && data.message) setLogs((old) => [...old, data.message!]);
+      if (data.type === "summary" && data.message) setLogs((old) => [...old, `Agent summary: ${data.message!}`]);
       if (data.type === "result") setResults((old) => [...old, data]);
       if (data.type === "done") { setLogs((old) => [...old, "Audit complete."]); setBusy(false); source.close(); }
     };
@@ -52,7 +55,7 @@ export default function Home() {
     <section className="hero"><p className="eyebrow">AUTHORIZED SECURITY AUDITING</p><h1>Verified Cloud<br /><span>Storage Auditor</span></h1><p>Find publicly reachable storage associated with domains you control. DNS proof is required before every scan.</p></section>
     <section className="panel">
       <form onSubmit={getToken}><label htmlFor="domain">Domain you own</label><div className="input-row"><input id="domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="example.com" disabled={busy} required /><button disabled={busy}>{busy && !verification ? "Working…" : "Get verification token"}</button></div></form>
-      {verification && <div className="challenge"><h2>1. Publish the DNS TXT record</h2><p>{verification.instructions}</p><code>{verification.record}</code><div className="actions"><button onClick={verify} disabled={busy || verified}>{verified ? "Domain verified" : "Verify TXT record"}</button>{verified && <button className="primary" onClick={startScan} disabled={busy}>{busy ? "Scanning…" : "Start scan"}</button>}</div></div>}
+      {verification && <div className="challenge"><h2>1. Publish the DNS TXT record</h2><p>{verification.instructions}</p><code>{verification.record}</code><div className="actions"><button onClick={verify} disabled={busy || verified}>{verified ? "Domain verified" : "Verify TXT record"}</button>{verified && <><label className="mode"><input type="checkbox" checked={agentic} onChange={(event) => setAgentic(event.target.checked)} /> Agentic mode (uses Groq)</label><button className="primary" onClick={startScan} disabled={busy}>{busy ? "Scanning…" : agentic ? "Start agentic scan" : "Start scan"}</button></>}</div></div>}
       {error && <p className="error">{error}</p>}
     </section>
     <section className="output"><div><h2>Live audit log</h2><div className="log" aria-live="polite">{logs.length ? logs.map((log, index) => <p key={`${log}-${index}`}>› {log}</p>) : <p>Awaiting verified domain.</p>}</div></div>
