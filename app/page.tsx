@@ -13,7 +13,7 @@ export default function Home() {
   const [logs, setLogs] = useState<string[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [error, setError] = useState("");
-  const [agentic, setAgentic] = useState(true);
+  const [agentic, setAgentic] = useState(false);
 
   async function getToken(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(""); setVerified(false); setResults([]); setLogs([]);
@@ -51,25 +51,10 @@ export default function Home() {
     source.onerror = () => { setError("The scan connection closed unexpectedly."); setBusy(false); source.close(); };
   }
 
-  function runDemo() {
-    const demoResults: Result[] = [
-      { name: "demo-assets-store", provider: "AWS_S3", status: "PUBLIC", httpStatus: 200 },
-      { name: "demo-media-store", provider: "GCS", status: "EXISTS_PRIVATE", httpStatus: 403 },
-      { name: "demo-backup-store", provider: "AZURE_BLOB", status: "NOT_FOUND", httpStatus: 404 },
-    ];
-    setBusy(true); setError(""); setResults([]); setLogs(["Demo mode: no external service is contacted.", "Simulating CT-informed candidate selection…"]);
-    demoResults.forEach((result, index) => window.setTimeout(() => {
-      setResults((old) => [...old, result]);
-      setLogs((old) => [...old, `Demo result: ${result.name} → ${result.status}`]);
-      if (index === demoResults.length - 1) { setLogs((old) => [...old, "Demo complete. Verify a domain to run a real audit."]); setBusy(false); }
-    }, (index + 1) * 700));
-  }
-
   return <main>
     <section className="hero"><p className="eyebrow">AUTHORIZED SECURITY AUDITING</p><h1>Verified Cloud<br /><span>Storage Auditor</span></h1><p>Find publicly reachable storage associated with domains you control. DNS proof is required before every scan.</p></section>
     <section className="panel">
       <form onSubmit={getToken}><label htmlFor="domain">Domain you own</label><div className="input-row"><input id="domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="example.com" disabled={busy} required /><button disabled={busy}>{busy && !verification ? "Working…" : "Get verification token"}</button></div></form>
-      <div className="demo"><span>Want to preview the interface first?</span><button type="button" onClick={runDemo} disabled={busy}>Run safe demo</button></div>
       {verification && <div className="challenge"><h2>1. Publish the DNS TXT record</h2><p>{verification.instructions}</p><code>{verification.record}</code><div className="actions"><button onClick={verify} disabled={busy || verified}>{verified ? "Domain verified" : "Verify TXT record"}</button>{verified && <><label className="mode"><input type="checkbox" checked={agentic} onChange={(event) => setAgentic(event.target.checked)} /> Agentic mode (uses Groq)</label><button className="primary" onClick={startScan} disabled={busy}>{busy ? "Scanning…" : agentic ? "Start agentic scan" : "Start scan"}</button></>}</div></div>}
       {error && <p className="error">{error}</p>}
     </section>
