@@ -10,6 +10,8 @@ export const maxDuration = 60;
 
 const encoder = new TextEncoder();
 const sse = (data: unknown) => encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+// Leaves time for stream completion before Vercel's 60-second function limit.
+const SCAN_BUDGET_MS = 50_000;
 
 export async function GET(request: NextRequest) {
   const domain = normalizeDomain(request.nextUrl.searchParams.get("domain") ?? "");
@@ -21,6 +23,7 @@ export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: unknown) => controller.enqueue(sse(event));
+      const deadline = Date.now() + SCAN_BUDGET_MS;
       try {
         send({ type: "status", message: "Reading certificate-transparency logs…" });
         const subdomains = await fetchSubdomains(domain);
@@ -42,13 +45,14 @@ export async function GET(request: NextRequest) {
         const jobs = candidates.flatMap((name) => buildTargets(name).map((target) => ({ name, target })));
         let next = 0;
         const worker = async () => {
-          while (next < jobs.length) {
+          while (next < jobs.length && Date.now() < deadline) {
             const job = jobs[next++];
             send({ type: "result", ...(await checkTarget(job.target, job.name)) });
           }
         };
         await Promise.all(Array.from({ length: Math.min(8, jobs.length) }, worker));
-        send({ type: "done", candidates: candidates.length, checks: jobs.length });
+        const completedChecks = next;
+        send({ type: "done", candidates: candidates.length, checks: completedChecks, timedOut: completedChecks < jobs.length });
       } catch (error) {
         send({ type: "status", level: "error", message: error instanceof Error ? error.message : "Scan failed" });
         send({ type: "done" });

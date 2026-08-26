@@ -1,6 +1,6 @@
-# Cloud Storage Exposure Auditor
+# Verified Cloud Storage Auditor
 
-An ownership-gated web auditor for publicly reachable AWS S3, Google Cloud Storage, and Azure Blob Storage names suggested by certificate-transparency data.
+An ownership-gated web auditor for publicly reachable AWS S3, Google Cloud Storage, and Azure Blob Storage names suggested by certificate-transparency data. It checks only bucket/container reachability; it never lists or downloads storage contents.
 
 ## Setup
 
@@ -13,11 +13,25 @@ npm run dev
 
 Open `http://localhost:3000`, request a verification challenge, publish the shown `bucket-finder-verify=<token>` TXT value on the domain itself, then verify it and run the scan. The Next.js app needs no environment variables. Deploy it to Vercel normally.
 
-The optional standalone agent needs Python 3.9+, the `groq` package (`pip install groq`), and a `GROQ_API_KEY` environment variable:
+The optional standalone agent needs Python 3.9+, the `groq` package (`pip install groq`), and a `GROQ_API_KEY` environment variable. Get this key from the [Groq Console](https://console.groq.com/keys); it is **not** used by the Vercel app and must never be added to Git or Vercel environment variables for this project.
 
 ```bash
 GROQ_API_KEY=... python3 agent.py --domain example.com
 ```
+
+On macOS/Linux, to use the key for the current terminal session:
+
+```bash
+export GROQ_API_KEY="your_key_here"
+python3 agent.py --domain example.com
+```
+
+## Deploying the web app to Vercel
+
+1. Push this repository to GitHub.
+2. In [Vercel](https://vercel.com/new), import the repository and leave the framework preset as **Next.js**.
+3. Do not add environment variables—the web app does not call Groq or require secrets.
+4. Deploy. The API routes explicitly use Vercel's Node.js runtime and the scan has a 50-second work budget within its 60-second limit.
 
 ## Authorized use only
 

@@ -1,5 +1,5 @@
 {
-  "name": "cloud-storage-exposure-auditor",
+  "name": "verified-cloud-storage-auditor",
   "private": true,
   "version": "1.0.0",
   "scripts": {

@@ -49,7 +49,7 @@ export default function Home() {
   }
 
   return <main>
-    <section className="hero"><p className="eyebrow">AUTHORIZED SECURITY AUDITING</p><h1>Cloud Storage<br /><span>Exposure Auditor</span></h1><p>Find publicly reachable storage associated with domains you control. DNS proof is required before every scan.</p></section>
+    <section className="hero"><p className="eyebrow">AUTHORIZED SECURITY AUDITING</p><h1>Verified Cloud<br /><span>Storage Auditor</span></h1><p>Find publicly reachable storage associated with domains you control. DNS proof is required before every scan.</p></section>
     <section className="panel">
       <form onSubmit={getToken}><label htmlFor="domain">Domain you own</label><div className="input-row"><input id="domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="example.com" disabled={busy} required /><button disabled={busy}>{busy && !verification ? "Working…" : "Get verification token"}</button></div></form>
       {verification && <div className="challenge"><h2>1. Publish the DNS TXT record</h2><p>{verification.instructions}</p><code>{verification.record}</code><div className="actions"><button onClick={verify} disabled={busy || verified}>{verified ? "Domain verified" : "Verify TXT record"}</button>{verified && <button className="primary" onClick={startScan} disabled={busy}>{busy ? "Scanning…" : "Start scan"}</button>}</div></div>}

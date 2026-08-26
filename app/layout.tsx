@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "Cloud Storage Exposure Auditor",
+  title: "Verified Cloud Storage Auditor",
   description: "Ownership-verified cloud storage exposure auditing.",
 };
 
