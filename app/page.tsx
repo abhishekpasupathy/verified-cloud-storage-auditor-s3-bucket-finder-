@@ -16,7 +16,6 @@ export default function Home() {
   const [results, setResults] = useState<Result[]>([]);
   const [error, setError] = useState("");
   const [agentic, setAgentic] = useState(false);
-  const [email, setEmail] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [history, setHistory] = useState<ScanHistory[]>([]);
@@ -37,12 +36,15 @@ export default function Home() {
 
   useEffect(() => { void loadHistory(); }, [userEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function signIn(event: FormEvent) {
-    event.preventDefault();
+  async function signInWithGitHub() {
     if (!isSupabaseConfigured) { setAuthMessage("Supabase is not configured yet. Follow the README setup."); return; }
+    setAuthMessage("");
     const supabase = createBrowserSupabaseClient();
-    const { error: signInError } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } });
-    setAuthMessage(signInError ? signInError.message : "Check your email for the secure sign-in link.");
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (signInError) setAuthMessage(signInError.message);
   }
 
   async function signOut() {
@@ -81,7 +83,7 @@ export default function Home() {
 
   function startScan() {
     if (!verification) return;
-    if (!userEmail) { setError("Sign in with email before starting a scan."); return; }
+    if (!userEmail) { setError("Sign in with GitHub before starting a scan."); return; }
     setBusy(true); setError(""); setResults([]); setLogs(["Opening audit stream…"]);
     const endpoint = agentic ? "/api/agent-scan" : "/api/scan";
     const source = new EventSource(`${endpoint}?domain=${encodeURIComponent(domain)}&verifiedToken=${encodeURIComponent(verification.token)}`);
@@ -96,7 +98,7 @@ export default function Home() {
   }
 
   return <main>
-    <section className="panel"><h2>Account</h2>{userEmail ? <div className="actions"><span>Signed in as {userEmail}</span><button type="button" onClick={signOut}>Sign out</button></div> : <form onSubmit={signIn}><div className="input-row"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /><button>Sign in by email</button></div></form>}{authMessage && <p>{authMessage}</p>}{!isSupabaseConfigured && <p className="error">Authentication needs Supabase environment variables. See README.</p>}</section>
+    <section className="panel"><h2>Account</h2>{userEmail ? <div className="actions"><span>Signed in as {userEmail}</span><button type="button" onClick={signOut}>Sign out</button></div> : <div className="actions"><button type="button" className="primary" onClick={signInWithGitHub}>Continue with GitHub</button></div>}{authMessage && <p>{authMessage}</p>}{!isSupabaseConfigured && <p className="error">Authentication needs Supabase environment variables. See README.</p>}</section>
     <section className="hero"><p className="eyebrow">AUTHORIZED SECURITY AUDITING</p><h1>Verified Cloud<br /><span>Storage Auditor</span></h1><p>Find publicly reachable storage associated with domains you control. DNS proof is required before every scan.</p></section>
     <section className="panel">
       <form onSubmit={getToken}><label htmlFor="domain">Domain you own</label><div className="input-row"><input id="domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="example.com" disabled={busy} required /><button disabled={busy}>{busy && !verification ? "Working…" : "Get verification token"}</button></div></form>
