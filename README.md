@@ -1,6 +1,44 @@
 # Verified Cloud Storage Auditor
 
-An ownership-gated web auditor for publicly reachable AWS S3, Google Cloud Storage, and Azure Blob Storage names suggested by certificate-transparency data. It checks only bucket/container reachability; it never lists or downloads storage contents.
+An ownership-gated, full-stack cloud-security project for finding potentially exposed AWS S3, Google Cloud Storage, and Azure Blob Storage endpoints associated with a domain the user controls.
+
+> The application verifies DNS ownership before any real audit. It checks endpoint reachability only—it never lists, downloads, or modifies storage contents.
+
+## Why this project exists
+
+Storage exposure is a common cloud-security failure mode, but broad bucket enumeration is unsafe. This project is intentionally designed for defensive use: a user must publish a DNS TXT challenge on the exact domain before candidate discovery or provider checks are permitted.
+
+## Features
+
+- DNS TXT challenge-response ownership verification for every real audit
+- Certificate Transparency (CT) log discovery of real subdomains
+- A* / cheapest-first candidate generation over CT-derived labels
+- SHA-256 Bloom-filter de-duplication
+- Bounded-concurrency reachability checks for AWS S3, GCS, and Azure Blob Storage
+- Live Server-Sent Events (SSE) audit progress and result table
+- Optional Groq tool-calling agent that prioritizes permitted candidates
+- Hard server-side limits: 12 agent rounds, 80 agent checks, 60 candidates, and a 50-second serverless work budget
+- Standalone Python Groq agent for CLI-based authorized audits
+
+## Architecture
+
+```text
+Browser → DNS ownership verification → Next.js API route
+                                      ├─ CT-log subdomain lookup
+                                      ├─ A* candidate generation + Bloom filter
+                                      ├─ Provider HEAD checks (S3 / GCS / Azure)
+                                      └─ SSE live results
+
+Optional agentic route → Groq tool calling → same server-enforced CT and provider tools
+```
+
+## Tech stack
+
+- Next.js 14 App Router, React 18, TypeScript
+- Vercel-ready Node.js route handlers and SSE streaming
+- Node DNS and Fetch APIs
+- Groq SDK tool calling for agentic mode
+- Python 3 standalone CLI agent
 
 ## Setup
 
@@ -12,6 +50,12 @@ npm run dev
 ```
 
 Open `http://localhost:3000`, request a verification challenge, publish the shown `bucket-finder-verify=<token>` TXT value on the domain itself, then verify it and run the scan. Agentic mode needs `GROQ_API_KEY`; deterministic mode does not.
+
+For local agentic mode, create an untracked `.env.local` file:
+
+```text
+GROQ_API_KEY=your_key_here
+```
 
 The optional standalone agent needs Python 3.9+, the `groq` package (`pip install groq`), and a `GROQ_API_KEY` environment variable. Get this key from the [Groq Console](https://console.groq.com/keys). The Vercel agentic endpoint uses the same key server-side.
 
@@ -34,6 +78,27 @@ python3 agent.py --domain example.com
 4. Deploy. The API routes explicitly use Vercel's Node.js runtime and the scan has a 50-second work budget within its 60-second limit.
 
 Agentic mode uses Groq tool calling, with exactly two server-enforced tools: CT-subdomain lookup and candidate reachability checks. It can only check names created from the verified domain's CT data, is capped at 12 tool-call rounds and 80 checks, and cannot list or download objects.
+
+## How to run a real audit
+
+1. Use a domain whose DNS you control. A shared `*.vercel.app` address cannot be verified.
+2. Enter the apex domain (for example, `example.com`) in the app.
+3. Copy the generated TXT value into your DNS provider using host/name `@`.
+4. Wait for DNS propagation and choose **Verify TXT record**.
+5. Start the normal scan, or enable agentic mode after configuring `GROQ_API_KEY`.
+
+New domains with no CT-listed subdomains can return few or no candidates; that is expected.
+
+## What this demonstrates
+
+This is a useful portfolio project because it demonstrates secure-by-default product design, full-stack TypeScript, serverless deployment, real-time UX, bounded network automation, algorithmic candidate prioritization, cloud-provider HTTP behavior, and constrained LLM tool use. For an interview, be ready to explain why DNS verification, hard limits, and no-content-access are important design decisions.
+
+## Limitations
+
+- An HTTP status is a reachability signal, not proof that a bucket belongs to the domain.
+- CT logs may be incomplete or delayed.
+- Shared Vercel subdomains cannot be used as verified domains.
+- For larger authorized inventory reviews, use a queued worker and cloud-provider inventory APIs with explicit account authorization.
 
 ## Authorized use only
 
