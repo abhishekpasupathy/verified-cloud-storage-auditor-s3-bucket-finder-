@@ -1,113 +1,60 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseBrowser";
 
 type Result = { name: string; provider: string; status: string; httpStatus?: number };
 type Verification = { token: string; record: string; instructions: string };
 type ScanHistory = { id: string; domain: string; mode: string; started_at: string; checks: number; public_findings: number; results: Result[] };
 
+const Icon = ({ children }: { children: string }) => <span className="icon" aria-hidden="true">{children}</span>;
+
 export default function Home() {
-  const [domain, setDomain] = useState("");
-  const [verification, setVerification] = useState<Verification | null>(null);
-  const [verified, setVerified] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [results, setResults] = useState<Result[]>([]);
-  const [error, setError] = useState("");
-  const [agentic, setAgentic] = useState(false);
-  const [userEmail, setUserEmail] = useState("");
-  const [authMessage, setAuthMessage] = useState("");
-  const [history, setHistory] = useState<ScanHistory[]>([]);
+  const [domain, setDomain] = useState(""); const [verification, setVerification] = useState<Verification | null>(null);
+  const [verified, setVerified] = useState(false); const [busy, setBusy] = useState(false); const [logs, setLogs] = useState<string[]>([]);
+  const [results, setResults] = useState<Result[]>([]); const [error, setError] = useState(""); const [agentic, setAgentic] = useState(false);
+  const [userEmail, setUserEmail] = useState(""); const [authMessage, setAuthMessage] = useState(""); const [history, setHistory] = useState<ScanHistory[]>([]);
 
-  async function loadHistory() {
-    if (!userEmail) return;
-    const response = await fetch("/api/history");
-    if (response.ok) setHistory((await response.json()).scans);
-  }
+  const summary = useMemo(() => {
+    const publicCount = results.filter((r) => r.status === "PUBLIC").length;
+    const privateCount = results.filter((r) => r.status === "EXISTS_PRIVATE").length;
+    const errors = results.filter((r) => r.status === "ERROR" || r.status === "UNKNOWN").length;
+    const score = results.length ? Math.max(0, 100 - publicCount * 35 - errors * 5) : 100;
+    return { publicCount, privateCount, errors, score };
+  }, [results]);
 
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    const supabase = createBrowserSupabaseClient();
-    supabase.auth.getUser().then(({ data }) => setUserEmail(data.user?.email ?? ""));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUserEmail(session?.user.email ?? ""));
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
+  async function loadHistory() { if (!userEmail) return; const response = await fetch("/api/history"); if (response.ok) setHistory((await response.json()).scans); }
+  useEffect(() => { if (!isSupabaseConfigured) return; const supabase = createBrowserSupabaseClient(); supabase.auth.getUser().then(({ data }) => setUserEmail(data.user?.email ?? "")); const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUserEmail(session?.user.email ?? "")); return () => listener.subscription.unsubscribe(); }, []);
   useEffect(() => { void loadHistory(); }, [userEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function signInWithGitHub() {
-    if (!isSupabaseConfigured) { setAuthMessage("Supabase is not configured yet. Follow the README setup."); return; }
-    setAuthMessage("");
-    const supabase = createBrowserSupabaseClient();
-    const { error: signInError } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (signInError) setAuthMessage(signInError.message);
-  }
+  async function signInWithGitHub() { if (!isSupabaseConfigured) { setAuthMessage("Supabase is not configured yet."); return; } setAuthMessage(""); const supabase = createBrowserSupabaseClient(); const { error: signInError } = await supabase.auth.signInWithOAuth({ provider: "github", options: { redirectTo: `${window.location.origin}/auth/callback` } }); if (signInError) setAuthMessage(signInError.message); }
+  async function signOut() { if (isSupabaseConfigured) await createBrowserSupabaseClient().auth.signOut(); setUserEmail(""); setHistory([]); }
+  function downloadCsv() { const rows = [["name", "provider", "status", "http_status"], ...results.map((item) => [item.name, item.provider, item.status, String(item.httpStatus ?? "")])]; const csv = rows.map((row) => row.map((value) => `"${value.replaceAll("\"", "\"\"")}"`).join(",")).join("\n"); const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); link.download = `storage-audit-${domain || "results"}.csv`; link.click(); URL.revokeObjectURL(link.href); }
 
-  async function signOut() {
-    if (isSupabaseConfigured) await createBrowserSupabaseClient().auth.signOut();
-    setUserEmail(""); setHistory([]);
-  }
+  async function getToken(event: FormEvent) { event.preventDefault(); setBusy(true); setError(""); setVerified(false); setResults([]); setLogs([]); try { const response = await fetch("/api/verify-domain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Could not create a challenge"); setDomain(data.domain); setVerification(data); } catch (err) { setError(err instanceof Error ? err.message : "Request failed"); } finally { setBusy(false); } }
+  async function verify() { if (!verification) return; setBusy(true); setError(""); try { const response = await fetch("/api/verify-domain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, token: verification.token }) }); const data = await response.json(); if (!data.verified) throw new Error(data.error ?? "TXT record not found yet"); setVerified(true); setLogs(["DNS ownership verified. You can now begin the audit."]); } catch (err) { setError(err instanceof Error ? err.message : "Verification failed"); } finally { setBusy(false); } }
+  function startScan() { if (!verification) return; if (!userEmail) { setError("Sign in with GitHub before starting a scan."); return; } setBusy(true); setError(""); setResults([]); setLogs([agentic ? "AI analyst initializing…" : "Opening secure audit stream…"]); const endpoint = agentic ? "/api/agent-scan" : "/api/scan"; const source = new EventSource(`${endpoint}?domain=${encodeURIComponent(domain)}&verifiedToken=${encodeURIComponent(verification.token)}`); source.onmessage = (event) => { const data = JSON.parse(event.data) as { type: string; message?: string } & Result; if (data.type === "status" && data.message) setLogs((old) => [...old, data.message!]); if (data.type === "summary" && data.message) setLogs((old) => [...old, `AI insight: ${data.message!}`]); if (data.type === "result") setResults((old) => [...old, data]); if (data.type === "done") { setLogs((old) => [...old, "Audit complete."]); setBusy(false); source.close(); void loadHistory(); } }; source.onerror = () => { setError("The scan connection closed unexpectedly."); setBusy(false); source.close(); }; }
 
-  function downloadCsv() {
-    const rows = [["name", "provider", "status", "http_status"], ...results.map((item) => [item.name, item.provider, item.status, String(item.httpStatus ?? "")])];
-    const csv = rows.map((row) => row.map((value) => `"${value.replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); link.download = `storage-audit-${domain || "results"}.csv`; link.click(); URL.revokeObjectURL(link.href);
-  }
+  return <div className="app-shell">
+    <aside className="sidebar"><div className="brand"><div className="brand-mark">◈</div><div><b>CloudGuard</b><span>Security Console</span></div></div><nav><a className="active" href="#overview"><Icon>▦</Icon>Overview</a><a href="#new-scan"><Icon>⌕</Icon>New scan</a><a href="#results"><Icon>◉</Icon>Findings</a><a href="#history"><Icon>◷</Icon>Scan history</a></nav><div className="sidebar-bottom"><div className="mini-status"><span className="pulse"/>Systems operational</div><small>v1.0 • Authorized auditing</small></div></aside>
+    <main className="dashboard">
+      <header className="topbar"><div><p className="crumb">SECURITY WORKSPACE / OVERVIEW</p><h1>Cloud security, <span>under control.</span></h1></div><div className="account">{userEmail ? <><div className="avatar">{userEmail[0]?.toUpperCase()}</div><div className="account-copy"><b>{userEmail}</b><button onClick={signOut}>Sign out</button></div></> : <button className="github-btn" onClick={signInWithGitHub}>◉ Continue with GitHub</button>}</div></header>
+      {authMessage && <div className="alert">{authMessage}</div>}{!isSupabaseConfigured && <div className="alert danger">Authentication needs Supabase environment variables.</div>}
 
-  async function getToken(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError(""); setVerified(false); setResults([]); setLogs([]);
-    try {
-      const response = await fetch("/api/verify-domain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Could not create a challenge");
-      setDomain(data.domain); setVerification(data);
-    } catch (err) { setError(err instanceof Error ? err.message : "Request failed"); }
-    finally { setBusy(false); }
-  }
+      <section id="overview" className="stat-grid"><div className="stat-card"><span>SECURITY POSTURE</span><strong>{results.length ? `${summary.score}/100` : "Ready"}</strong><small>{results.length ? (summary.publicCount ? "Action recommended" : "No public endpoints detected") : "Run an audit to calculate"}</small><div className="meter"><i style={{ width: `${results.length ? summary.score : 0}%` }}/></div></div><div className="stat-card"><span>TARGETS CHECKED</span><strong>{results.length}</strong><small>{busy ? "Scan in progress" : "Current audit"}</small></div><div className="stat-card"><span>PUBLIC FINDINGS</span><strong className={summary.publicCount ? "risk" : "safe"}>{summary.publicCount}</strong><small>Requires review</small></div><div className="stat-card"><span>PRIVATE ENDPOINTS</span><strong>{summary.privateCount}</strong><small>Access denied responses</small></div></section>
 
-  async function verify() {
-    if (!verification) return; setBusy(true); setError("");
-    try {
-      const response = await fetch("/api/verify-domain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, token: verification.token }) });
-      const data = await response.json();
-      if (!data.verified) throw new Error(data.error ?? "TXT record not found yet");
-      setVerified(true); setLogs(["DNS ownership verified. You can now begin the audit."]);
-    } catch (err) { setError(err instanceof Error ? err.message : "Verification failed"); }
-    finally { setBusy(false); }
-  }
+      <section id="new-scan" className="workspace-card"><div className="section-heading"><div><p className="eyebrow">NEW SECURITY AUDIT</p><h2>Verify a domain, then scan.</h2><p>Ownership is required before any cloud storage checks begin.</p></div><div className="step-indicator"><span className={verification ? "done" : "current"}>1</span><i/><span className={verified ? "done" : verification ? "current" : ""}>2</span><i/><span className={verified ? "current" : ""}>3</span></div></div>
+        <form onSubmit={getToken} className="scan-form"><div className="field"><label htmlFor="domain">DOMAIN YOU CONTROL</label><input id="domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="example.com" disabled={busy} required/></div><button className="primary big" disabled={busy}>{busy && !verification ? "Preparing…" : "Generate verification"}</button></form>
+        {verification && <div className="verification"><div className="verify-icon">✓</div><div className="verify-copy"><span>STEP 2 — DNS OWNERSHIP PROOF</span><h3>Publish this TXT verification record</h3><p>{verification.instructions}</p><code>{verification.record}</code><div className="verify-actions"><button onClick={verify} disabled={busy || verified}>{verified ? "✓ Domain verified" : "Verify TXT record"}</button>{verified && <button className="primary" onClick={startScan} disabled={busy}>{busy ? "Scanning…" : agentic ? "Start AI-assisted scan" : "Start security scan"}</button>}</div></div></div>}
+        {verified && <div className="scan-modes"><button type="button" className={!agentic ? "mode-card selected" : "mode-card"} onClick={() => setAgentic(false)}><b>Standard scan</b><span>Fast, deterministic endpoint checks</span></button><button type="button" className={agentic ? "mode-card selected" : "mode-card"} onClick={() => setAgentic(true)}><b>✦ AI-assisted scan</b><span>Groq agent prioritizes permitted checks</span></button></div>}
+        {error && <div className="alert danger">{error}</div>}
+      </section>
 
-  function startScan() {
-    if (!verification) return;
-    if (!userEmail) { setError("Sign in with GitHub before starting a scan."); return; }
-    setBusy(true); setError(""); setResults([]); setLogs(["Opening audit stream…"]);
-    const endpoint = agentic ? "/api/agent-scan" : "/api/scan";
-    const source = new EventSource(`${endpoint}?domain=${encodeURIComponent(domain)}&verifiedToken=${encodeURIComponent(verification.token)}`);
-    source.onmessage = (event) => {
-      const data = JSON.parse(event.data) as { type: string; message?: string } & Result;
-      if (data.type === "status" && data.message) setLogs((old) => [...old, data.message!]);
-      if (data.type === "summary" && data.message) setLogs((old) => [...old, `Agent summary: ${data.message!}`]);
-      if (data.type === "result") setResults((old) => [...old, data]);
-      if (data.type === "done") { setLogs((old) => [...old, "Audit complete."]); setBusy(false); source.close(); void loadHistory(); }
-    };
-    source.onerror = () => { setError("The scan connection closed unexpectedly."); setBusy(false); source.close(); };
-  }
+      <section id="results" className="results-layout"><div className="workspace-card live-card"><div className="section-heading compact"><div><p className="eyebrow">LIVE ACTIVITY</p><h2>{busy && agentic ? "AI analyst is working" : "Audit activity"}</h2></div><span className={busy ? "live-dot" : "idle-dot"}>{busy ? "LIVE" : "IDLE"}</span></div><div className="log" aria-live="polite">{logs.length ? logs.map((log, index) => <p key={`${log}-${index}`}>› {log}</p>) : <p>Waiting for a verified domain.</p>}</div></div>
+        <div className="workspace-card findings-card"><div className="section-heading compact"><div><p className="eyebrow">FINDINGS</p><h2>Audit results <small>{results.length} checks</small></h2></div>{results.length > 0 && <button className="export" onClick={downloadCsv}>↓ Export CSV</button>}</div><div className="finding-summary"><span>Public <b>{summary.publicCount}</b></span><span>Private <b>{summary.privateCount}</b></span><span>Other <b>{Math.max(0, results.length-summary.publicCount-summary.privateCount)}</b></span></div><div className="table-wrap"><table><thead><tr><th>RESOURCE</th><th>PROVIDER</th><th>STATUS</th><th>HTTP</th></tr></thead><tbody>{results.map((result, index) => <tr key={`${result.name}-${result.provider}-${index}`}><td><b>{result.name}</b></td><td>{result.provider.replaceAll("_", " ")}</td><td><span className={`badge ${result.status.toLowerCase()}`}>{result.status.replaceAll("_", " ")}</span></td><td>{result.httpStatus ?? "—"}</td></tr>)}{!results.length && <tr><td colSpan={4} className="empty">Findings will stream here during your audit.</td></tr>}</tbody></table></div></div></section>
 
-  return <main>
-    <section className="panel"><h2>Account</h2>{userEmail ? <div className="actions"><span>Signed in as {userEmail}</span><button type="button" onClick={signOut}>Sign out</button></div> : <div className="actions"><button type="button" className="primary" onClick={signInWithGitHub}>Continue with GitHub</button></div>}{authMessage && <p>{authMessage}</p>}{!isSupabaseConfigured && <p className="error">Authentication needs Supabase environment variables. See README.</p>}</section>
-    <section className="hero"><p className="eyebrow">AUTHORIZED SECURITY AUDITING</p><h1>Verified Cloud<br /><span>Storage Auditor</span></h1><p>Find publicly reachable storage associated with domains you control. DNS proof is required before every scan.</p></section>
-    <section className="panel">
-      <form onSubmit={getToken}><label htmlFor="domain">Domain you own</label><div className="input-row"><input id="domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="example.com" disabled={busy} required /><button disabled={busy}>{busy && !verification ? "Working…" : "Get verification token"}</button></div></form>
-      {verification && <div className="challenge"><h2>1. Publish the DNS TXT record</h2><p>{verification.instructions}</p><code>{verification.record}</code><div className="actions"><button onClick={verify} disabled={busy || verified}>{verified ? "Domain verified" : "Verify TXT record"}</button>{verified && <><label className="mode"><input type="checkbox" checked={agentic} onChange={(event) => setAgentic(event.target.checked)} /> Agentic mode (uses Groq)</label><button className="primary" onClick={startScan} disabled={busy}>{busy ? "Scanning…" : agentic ? "Start agentic scan" : "Start scan"}</button></>}</div></div>}
-      {error && <p className="error">{error}</p>}
-    </section>
-    <section className="output"><div><h2>Live audit log</h2><div className="log" aria-live="polite">{logs.length ? logs.map((log, index) => <p key={`${log}-${index}`}>› {log}</p>) : <p>Awaiting verified domain.</p>}</div></div>
-      <div><h2>Results <small>{results.length} checks</small></h2>{results.length > 0 && <button type="button" onClick={downloadCsv}>Download CSV</button>}<div className="table-wrap"><table><thead><tr><th>Name</th><th>Provider</th><th>Result</th><th>HTTP</th></tr></thead><tbody>{results.map((result, index) => <tr key={`${result.name}-${result.provider}-${index}`}><td>{result.name}</td><td>{result.provider.replace("_", " ")}</td><td><span className={`badge ${result.status.toLowerCase()}`}>{result.status}</span></td><td>{result.httpStatus ?? "—"}</td></tr>)}{!results.length && <tr><td colSpan={4} className="empty">Results will appear as targets are checked.</td></tr>}</tbody></table></div></div>
-    </section>
-    {userEmail && <section className="panel"><h2>Scan history</h2><div className="table-wrap"><table><thead><tr><th>Domain</th><th>Mode</th><th>Started</th><th>Checks</th><th>Public</th></tr></thead><tbody>{history.map((scan) => <tr key={scan.id}><td>{scan.domain}</td><td>{scan.mode}</td><td>{new Date(scan.started_at).toLocaleString()}</td><td>{scan.checks}</td><td>{scan.public_findings}</td></tr>)}{!history.length && <tr><td colSpan={5} className="empty">Your completed scans will appear here.</td></tr>}</tbody></table></div></section>}
-  </main>;
+      {userEmail && <section id="history" className="workspace-card history-card"><div className="section-heading compact"><div><p className="eyebrow">YOUR WORKSPACE</p><h2>Recent security audits</h2></div><span className="history-count">{history.length} total</span></div><div className="table-wrap"><table><thead><tr><th>DOMAIN</th><th>MODE</th><th>STARTED</th><th>CHECKS</th><th>PUBLIC</th></tr></thead><tbody>{history.map((scan) => <tr key={scan.id}><td><b>{scan.domain}</b></td><td><span className="mode-pill">{scan.mode}</span></td><td>{new Date(scan.started_at).toLocaleString()}</td><td>{scan.checks}</td><td>{scan.public_findings}</td></tr>)}{!history.length && <tr><td colSpan={5} className="empty">Completed audits will appear here.</td></tr>}</tbody></table></div></section>}
+      <footer className="dashboard-footer"><span>CloudGuard Security Console</span><span>Built by <b>Abhishek Pasupathy</b> · <a href="mailto:abhishekpasupathy2006@gmail.com">Contact</a></span></footer>
+    </main>
+  </div>;
 }
