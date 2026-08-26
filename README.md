@@ -19,6 +19,7 @@ Storage exposure is a common cloud-security failure mode, but broad bucket enume
 - Optional Groq tool-calling agent that prioritizes permitted candidates
 - Hard server-side limits: 12 agent rounds, 80 agent checks, 60 candidates, and a 50-second serverless work budget
 - Standalone Python Groq agent for CLI-based authorized audits
+- Passwordless email authentication, user-scoped scan history, and CSV export
 
 ## Architecture
 
@@ -55,7 +56,19 @@ For local agentic mode, create an untracked `.env.local` file:
 
 ```text
 GROQ_API_KEY=your_key_here
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 ```
+
+## Authentication and scan history setup
+
+1. Create a free project at [Supabase](https://supabase.com).
+2. Open **SQL Editor**, paste the contents of [`supabase/schema.sql`](./supabase/schema.sql), and run it.
+3. In Supabase **Authentication → URL Configuration**, set the Site URL to your deployed Vercel URL and add `https://your-app.vercel.app/auth/callback` to Redirect URLs.
+4. Copy the Project URL and anon key from **Settings → API** into `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+5. Add those two variables to Vercel for Production, Preview, and Development, then redeploy.
+
+The application uses passwordless email sign-in. Row Level Security in the supplied SQL ensures each user can read and update only their own scan history.
 
 The optional standalone agent needs Python 3.9+, the `groq` package (`pip install groq`), and a `GROQ_API_KEY` environment variable. Get this key from the [Groq Console](https://console.groq.com/keys). The Vercel agentic endpoint uses the same key server-side.
 
@@ -74,7 +87,7 @@ python3 agent.py --domain example.com
 
 1. Push this repository to GitHub.
 2. In [Vercel](https://vercel.com/new), import the repository and leave the framework preset as **Next.js**.
-3. Add `GROQ_API_KEY` as an environment variable for Production, Preview, and Development. Do not prefix it with `NEXT_PUBLIC_`.
+3. Add `GROQ_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as environment variables for Production, Preview, and Development. Do not prefix `GROQ_API_KEY` with `NEXT_PUBLIC_`.
 4. Deploy. The API routes explicitly use Vercel's Node.js runtime and the scan has a 50-second work budget within its 60-second limit.
 
 Agentic mode uses Groq tool calling, with exactly two server-enforced tools: CT-subdomain lookup and candidate reachability checks. It can only check names created from the verified domain's CT data, is capped at 12 tool-call rounds and 80 checks, and cannot list or download objects.
@@ -92,6 +105,15 @@ New domains with no CT-listed subdomains can return few or no candidates; that i
 ## What this demonstrates
 
 This is a useful portfolio project because it demonstrates secure-by-default product design, full-stack TypeScript, serverless deployment, real-time UX, bounded network automation, algorithmic candidate prioritization, cloud-provider HTTP behavior, and constrained LLM tool use. For an interview, be ready to explain why DNS verification, hard limits, and no-content-access are important design decisions.
+
+## Tests
+
+```bash
+npm test
+npm run build
+```
+
+The unit suite covers A* ordering, Bloom-filter membership, and CT-derived token weighting.
 
 ## Limitations
 

@@ -5,6 +5,7 @@ import { BloomFilter } from "@/lib/bloomFilter";
 import { buildTargets, checkTarget, deriveTokensFromSubdomains } from "@/lib/cloudProviders";
 import { fetchSubdomains } from "@/lib/ctLogs";
 import { isVerified, normalizeDomain } from "@/lib/domainVerification";
+import { getAuthenticatedUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,10 +33,13 @@ function candidatesFromSubdomains(subdomains: string[]): string[] {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await getAuthenticatedUser();
+  if (!auth.user || !auth.supabase) return NextResponse.json({ error: auth.error }, { status: auth.error === "Authentication is not configured." ? 503 : 401 });
   const domain = normalizeDomain(request.nextUrl.searchParams.get("domain") ?? "");
   const verifiedToken = request.nextUrl.searchParams.get("verifiedToken") ?? "";
   if (!domain || !(await isVerified(domain, verifiedToken))) return NextResponse.json({ error: "A current DNS verification token for this exact domain is required." }, { status: 403 });
   if (!process.env.GROQ_API_KEY) return NextResponse.json({ error: "GROQ_API_KEY is not configured on the server." }, { status: 503 });
+  const { data: scan } = await auth.supabase.from("scan_history").insert({ user_id: auth.user.id, domain, mode: "agentic" }).select("id").single();
 
   const stream = new ReadableStream({ async start(controller) {
     const send = (event: unknown) => controller.enqueue(sse(event));
@@ -46,6 +50,7 @@ export async function GET(request: NextRequest) {
     ];
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
     let checks = 0;
+    const results: any[] = [];
     let permitted = new Set<string>();
     let ctFetched = false;
     try {
@@ -79,6 +84,7 @@ export async function GET(request: NextRequest) {
               checks += 1;
               const target = buildTargets(name).find((item) => item.provider === provider)!;
               result = await checkTarget(target, name);
+              results.push(result);
               send({ type: "result", ...(result as object) });
             }
           } else result = { error: "Unknown tool." };
@@ -86,6 +92,7 @@ export async function GET(request: NextRequest) {
         }
       }
       if (Date.now() >= deadline) send({ type: "status", level: "warning", message: "Agent work budget reached; ending before the function timeout." });
+      if (scan) await auth.supabase.from("scan_history").update({ completed_at: new Date().toISOString(), checks, public_findings: results.filter((item) => item.status === "PUBLIC").length, results }).eq("id", scan.id);
       send({ type: "done", checks, maxChecks: MAX_BUCKET_CHECKS });
     } catch (error) {
       send({ type: "status", level: "error", message: error instanceof Error ? error.message : "Agent scan failed" });
