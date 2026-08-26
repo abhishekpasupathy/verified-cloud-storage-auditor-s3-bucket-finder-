@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body>{children}<footer className="site-footer"><div>Verified Cloud Storage Auditor</div><div>Developed by <strong>Abhishek Pasupathy</strong> · <a href="mailto:abhishekpasupathy2006@gmail.com">abhishekpasupathy2006@gmail.com</a></div></footer></body></html>;
 }
