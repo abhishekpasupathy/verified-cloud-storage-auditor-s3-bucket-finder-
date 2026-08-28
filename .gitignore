@@ -2,3 +2,4 @@ node_modules/
 .next/
 __pycache__/
 .env*
+.vercel
