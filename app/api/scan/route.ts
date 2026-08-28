@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { astarGenerateCandidates } from "@/lib/astar";
-import { BloomFilter } from "@/lib/bloomFilter";
-import { buildTargets, checkTarget, deriveTokensFromSubdomains } from "@/lib/cloudProviders";
+import { candidatesFromSubdomains } from "@/lib/candidates";
+import { buildTargets, checkTarget } from "@/lib/cloudProviders";
 import { fetchSubdomains } from "@/lib/ctLogs";
 import { isVerified, normalizeDomain } from "@/lib/domainVerification";
 import { getAuthenticatedUser } from "@/lib/auth";
@@ -33,19 +32,7 @@ export async function GET(request: NextRequest) {
         send({ type: "status", message: "Reading certificate-transparency logs…" });
         const subdomains = await fetchSubdomains(domain);
         send({ type: "status", message: `Found ${subdomains.length} certificate-log subdomains; deriving names from them.` });
-        const tokens = deriveTokensFromSubdomains(subdomains).slice(0, 20);
-        const bases = [...new Set(subdomains.flatMap((name) => name.split(".").slice(0, -2).flatMap((label) => label.split(/[^a-z0-9]+/))))]
-          .filter((label) => label.length >= 2 && label.length <= 40)
-          .slice(0, 20);
-        const dedupe = new BloomFilter();
-        const candidates: string[] = [];
-        for (const base of bases) {
-          for (const candidate of astarGenerateCandidates(base, tokens, 2, 12)) {
-            if (!dedupe.has(candidate)) { dedupe.add(candidate); candidates.push(candidate); }
-            if (candidates.length >= 60) break;
-          }
-          if (candidates.length >= 60) break;
-        }
+        const candidates = candidatesFromSubdomains(subdomains);
         send({ type: "status", message: `Checking ${candidates.length} CT-derived candidates across three providers (8 concurrent requests)…` });
         const jobs = candidates.flatMap((name) => buildTargets(name).map((target) => ({ name, target })));
         let next = 0;

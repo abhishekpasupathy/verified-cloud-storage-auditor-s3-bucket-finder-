@@ -1,8 +1,7 @@
 import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
-import { astarGenerateCandidates } from "@/lib/astar";
-import { BloomFilter } from "@/lib/bloomFilter";
-import { buildTargets, checkTarget, deriveTokensFromSubdomains } from "@/lib/cloudProviders";
+import { candidatesFromSubdomains } from "@/lib/candidates";
+import { buildTargets, checkTarget } from "@/lib/cloudProviders";
 import { fetchSubdomains } from "@/lib/ctLogs";
 import { isVerified, normalizeDomain } from "@/lib/domainVerification";
 import { getAuthenticatedUser } from "@/lib/auth";
@@ -19,18 +18,6 @@ const tools = [
   { type: "function", function: { name: "fetch_ct_subdomains", description: "Fetch certificate-transparency subdomains for the already authorized domain. Call this first.", parameters: { type: "object", properties: { domain: { type: "string" } }, required: ["domain"] } } },
   { type: "function", function: { name: "check_bucket_name", description: "Check one permitted CT-derived storage name on one provider. This only checks reachability; it never lists objects.", parameters: { type: "object", properties: { name: { type: "string" }, provider: { type: "string", enum: ["AWS_S3", "GCS", "AZURE_BLOB"] } }, required: ["name", "provider"] } } },
 ];
-
-function candidatesFromSubdomains(subdomains: string[]): string[] {
-  const tokens = deriveTokensFromSubdomains(subdomains).slice(0, 20);
-  const bases = [...new Set(subdomains.flatMap((name) => name.split(".").slice(0, -2).flatMap((label) => label.split(/[^a-z0-9]+/))))].filter((label) => label.length >= 2 && label.length <= 40).slice(0, 20);
-  const dedupe = new BloomFilter();
-  const candidates: string[] = [];
-  for (const base of bases) for (const candidate of astarGenerateCandidates(base, tokens, 2, 12)) {
-    if (!dedupe.has(candidate)) { dedupe.add(candidate); candidates.push(candidate); }
-    if (candidates.length >= 60) return candidates;
-  }
-  return candidates;
-}
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();

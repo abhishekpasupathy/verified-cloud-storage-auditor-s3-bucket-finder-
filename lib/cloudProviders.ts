@@ -1,4 +1,4 @@
-import type { WeightedToken } from "./astar";
+import type { WeightedToken } from "./bestFirst";
 
 export type Provider = "AWS_S3" | "GCS" | "AZURE_BLOB";
 export type Target = { provider: Provider; url: string };

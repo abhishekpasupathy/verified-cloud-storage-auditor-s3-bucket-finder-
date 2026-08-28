@@ -36,7 +36,7 @@ Certificate Transparency data provides domain-associated subdomains
      ↓
 Candidate engine prioritizes likely storage names
      ↓
-Bloom filter removes duplicate candidates
+Exact set de-duplication removes duplicate candidates
      ↓
 Bounded checks test S3 / GCS / Azure endpoints
      ↓
@@ -97,11 +97,11 @@ These names provide real infrastructure-derived signals instead of relying only 
 
 ### 2. Candidate generation
 
-The candidate engine extracts labels and useful tokens from the CT-derived names and combines them with controlled storage-related terms. An A*/cheapest-first strategy prioritizes more promising combinations.
+The candidate engine extracts labels and useful tokens from the CT-derived names and combines them with controlled storage-related terms. A uniform-cost / best-first strategy prioritizes more promising combinations.
 
 ### 3. De-duplication
 
-A SHA-256 Bloom filter prevents the same candidate from being processed repeatedly. The candidate set is also hard-limited to keep the scan bounded.
+An exact `Set` prevents the same candidate from being processed repeatedly. The candidate set is also hard-limited to keep the scan bounded.
 
 ```text
 CT subdomains
@@ -110,9 +110,9 @@ Extract labels/tokens
      ↓
 Weighted candidate combinations
      ↓
-A* / cheapest-first ordering
+Uniform-cost / best-first ordering
      ↓
-Bloom-filter de-duplication
+Exact set de-duplication
      ↓
 Maximum candidate limit
 ```
@@ -203,9 +203,9 @@ Browser / SaaS Dashboard
           │
           ├── CT-log subdomain lookup
           │
-          ├── A* candidate generation
+          ├── Uniform-cost / best-first candidate generation
           │
-          ├── Bloom-filter de-duplication
+          ├── Exact `Set`-based de-duplication
           │
           ├── S3 / GCS / Azure HEAD checks
           │
@@ -222,8 +222,8 @@ Next.js agent route → Groq tool calling → same server-enforced tools
 
 - DNS TXT challenge-response ownership verification for every real audit
 - Certificate Transparency (CT) log discovery of real subdomains
-- A* / cheapest-first candidate generation over CT-derived labels
-- SHA-256 Bloom-filter de-duplication
+- Uniform-cost / best-first candidate generation over CT-derived labels
+- Exact `Set`-based candidate de-duplication
 - Bounded-concurrency reachability checks for AWS S3, GCS, and Azure Blob Storage
 - Live Server-Sent Events (SSE) audit progress and result table
 - Optional Groq tool-calling agent that prioritizes permitted candidates
@@ -299,7 +299,7 @@ This project demonstrates more than a bucket checker. It combines:
 - Authentication and user-scoped persistence
 - DNS and Certificate Transparency data processing
 - Algorithmic candidate prioritization
-- Probabilistic de-duplication with a Bloom filter
+- Exact, bounded candidate de-duplication
 - Concurrent network I/O and HTTP response classification
 - Server-Sent Events for real-time UX
 - Multi-cloud endpoint analysis
@@ -315,7 +315,7 @@ npm test
 npm run build
 ```
 
-The unit suite covers A* ordering, Bloom-filter membership, and CT-derived token weighting.
+The unit suite covers best-first ordering, exact candidate de-duplication and limits, and CT-derived token weighting.
 
 ## Limitations
 

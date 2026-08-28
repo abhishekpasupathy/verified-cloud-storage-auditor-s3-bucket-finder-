@@ -3,10 +3,12 @@ export type WeightedToken = { token: string; cost: number };
 type Node = { name: string; cost: number; depth: number };
 
 /**
- * Best-first (A* with a zero admissible heuristic) walk over names formed by
- * appending caller-supplied tokens. No vocabulary is embedded here.
+ * Generates candidate names in ascending accumulated token cost.
+ *
+ * With no heuristic or goal state, this is a uniform-cost / best-first walk
+ * over the implicit candidate graph.
  */
-export function astarGenerateCandidates(
+export function bestFirstGenerateCandidates(
   base: string,
   tokens: WeightedToken[],
   maxDepth: number,
@@ -20,8 +22,6 @@ export function astarGenerateCandidates(
 
   while (queue.length && output.length < maxCandidates) {
     const current = queue.shift()!;
-    // The observed base is also a valid zero-cost candidate; later nodes are
-    // ordered after it by their accumulated token cost.
     output.push(current.name);
     if (current.depth === maxDepth) continue;
 
