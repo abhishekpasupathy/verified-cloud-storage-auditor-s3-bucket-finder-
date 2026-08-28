@@ -317,6 +317,10 @@ npm run build
 
 The unit suite covers best-first ordering, exact candidate de-duplication and limits, and CT-derived token weighting.
 
+## Authorized end-to-end POC
+
+For a repeatable demonstration using an empty private S3 bucket and a domain you control, see [the authorized S3 detection POC](./poc/README.md). It includes Terraform, DNS/Certificate Transparency validation, expected scan evidence, and cleanup steps.
+
 ## Limitations
 
 - An HTTP status is a reachability signal, not proof that a bucket belongs to the domain.

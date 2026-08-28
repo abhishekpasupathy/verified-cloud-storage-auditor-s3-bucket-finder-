@@ -3,3 +3,8 @@ node_modules/
 __pycache__/
 .env*
 .vercel
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!poc/terraform/terraform.tfvars.example
