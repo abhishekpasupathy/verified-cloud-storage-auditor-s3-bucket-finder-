@@ -6,6 +6,7 @@ import { isVerified, normalizeDomain } from "@/lib/domainVerification";
 import { getAuthenticatedUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const encoder = new TextEncoder();

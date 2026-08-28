@@ -7,6 +7,7 @@ import { isVerified, normalizeDomain } from "@/lib/domainVerification";
 import { getAuthenticatedUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const MAX_ITERATIONS = 12;
 const MAX_BUCKET_CHECKS = 80;
@@ -43,7 +44,12 @@ export async function GET(request: NextRequest) {
     try {
       send({ type: "status", message: "Agent started. It will inspect certificate data before choosing targets." });
       for (let round = 0; round < MAX_ITERATIONS && Date.now() < deadline; round += 1) {
-        const completion = await groq.chat.completions.create({ model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile", messages, tools, tool_choice: "auto", parallel_tool_calls: false, temperature: 0.1, max_tokens: 700 });
+        let completion;
+        try {
+          completion = await groq.chat.completions.create({ model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile", messages, tools, tool_choice: "auto", parallel_tool_calls: false, temperature: 0.1, max_tokens: 700 });
+        } catch {
+          completion = await groq.chat.completions.create({ model: "llama-3.1-8b-instant", messages, tools, tool_choice: "auto", parallel_tool_calls: false, temperature: 0.1, max_tokens: 700 });
+        }
         const message = completion.choices[0]?.message;
         if (!message) throw new Error("Groq returned no completion");
         messages.push(message);

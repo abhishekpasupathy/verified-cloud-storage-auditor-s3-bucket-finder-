@@ -15,7 +15,15 @@ export function buildTargets(name: string): Target[] {
 
 export async function checkTarget(target: Target, name: string): Promise<CheckResult> {
   try {
-    const response = await fetch(target.url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(5_000), cache: "no-store" });
+    const response = await fetch(target.url, {
+      method: "HEAD",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) VerifiedCloudStorageAuditor/1.0",
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(5_000),
+      cache: "no-store",
+    });
     const status = response.status === 200 ? "PUBLIC" : response.status === 403 ? "EXISTS_PRIVATE" : response.status === 404 ? "NOT_FOUND" : "UNKNOWN";
     return { ...target, name, status, httpStatus: response.status };
   } catch {

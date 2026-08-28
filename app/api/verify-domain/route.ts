@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createChallenge, isVerified, normalizeDomain } from "@/lib/domainVerification";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   let body: { domain?: unknown; token?: unknown };
